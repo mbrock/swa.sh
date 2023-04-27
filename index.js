@@ -5,16 +5,15 @@ const transcriptionResult = document.getElementById("transcriptionResult")
 async function listen() {
   OPENAI_API_KEY = prompt("OpenAI API key")
 
-  let mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  let audioContext = new AudioContext();
-  await audioContext.audioWorklet.addModule("rms.js");
+  let mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  let audioContext = new AudioContext()
+  await audioContext.audioWorklet.addModule("rms.js")
 
-  let source = audioContext.createMediaStreamSource(mediaStream);
-  let rmsProcessor = new AudioWorkletNode(audioContext, "rms-processor");
-  source.connect(rmsProcessor);
-  //rmsProcessor.connect(audioContext.destination);
+  let source = audioContext.createMediaStreamSource(mediaStream)
+  let rmsProcessor = new AudioWorkletNode(audioContext, "rms")
+  source.connect(rmsProcessor)
 
-  let mediaRecorder = new MediaRecorder(mediaStream);
+  let mediaRecorder = new MediaRecorder(mediaStream)
 
   mediaRecorder.ondataavailable = (event) => {
     transcribe([event.data])
@@ -29,7 +28,6 @@ async function listen() {
 
       const paragraph = document.createElement("p")
       transcriptionResult.appendChild(paragraph)
-      // indicate that we're listening with an emoji
       paragraph.innerText = "👂"
 
     } else {
@@ -41,7 +39,7 @@ async function listen() {
 }
 
 
-document.querySelector("#listenButton").addEventListener("click", listen);
+document.querySelector("#listenButton").addEventListener("click", listen)
 
 async function transcribe(chunks) {
   const blob = new Blob(chunks, { type: "audio/mp4" })
@@ -65,6 +63,6 @@ async function transcribe(chunks) {
     const result = await response.json()
     paragraph.innerText = result.text
   } catch (error) {
-    console.error("Error:", error)
+    console.error(error)
   }
 }

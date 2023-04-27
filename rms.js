@@ -44,4 +44,4 @@ class RmsProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('rms-processor', RmsProcessor);
+registerProcessor('rms', RmsProcessor);
