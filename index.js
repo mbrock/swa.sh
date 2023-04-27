@@ -3,7 +3,12 @@ let OPENAI_API_KEY
 const transcriptionResult = document.getElementById("transcriptionResult")
 
 async function listen() {
-  OPENAI_API_KEY = prompt("OpenAI API key")
+  if (localStorage.getItem("OPENAI_API_KEY")) {
+    OPENAI_API_KEY = localStorage.getItem("OPENAI_API_KEY")
+  } else {
+    OPENAI_API_KEY = prompt("OpenAI API key")
+    localStorage.setItem("OPENAI_API_KEY", OPENAI_API_KEY)
+  }
 
   let mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
   let audioContext = new AudioContext()
