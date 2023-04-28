@@ -1,72 +1,74 @@
-let OPENAI_API_KEY
+let apiKey
 
-const transcriptionResult = document.getElementById("transcriptionResult")
+const div = document.getElementById("transcriptionResult")
 
 async function listen() {
-  if (localStorage.getItem("OPENAI_API_KEY")) {
-    OPENAI_API_KEY = localStorage.getItem("OPENAI_API_KEY")
-  } else {
-    OPENAI_API_KEY = prompt("OpenAI API key")
-    localStorage.setItem("OPENAI_API_KEY", OPENAI_API_KEY)
-  }
+  apiKey = localStorage.getItem("OPENAI_API_KEY") || prompt("OpenAI API key:")
+  localStorage.setItem("OPENAI_API_KEY", apiKey)
 
-  let mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
   let audioContext = new AudioContext()
   await audioContext.audioWorklet.addModule("rms.js")
 
-  let source = audioContext.createMediaStreamSource(mediaStream)
-  let rmsProcessor = new AudioWorkletNode(audioContext, "rms")
-  source.connect(rmsProcessor)
+  let stream =
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+  let source =
+    audioContext.createMediaStreamSource(stream)
+  let rms =
+    new AudioWorkletNode(audioContext, "rms")
 
-  let mediaRecorder = new MediaRecorder(mediaStream)
+  source.connect(rms)
 
-  mediaRecorder.ondataavailable = (event) => {
-    transcribe([event.data])
-  }
+  let recorder = new MediaRecorder(stream)
+  let p
 
-  rmsProcessor.port.onmessage = (event) => {
+  recorder.ondataavailable = event => transcribe([event.data], p, audioContext)
+
+  rms.port.onmessage = event => {
     console.log(event.data)
-    if (!event.data.silent) {
-      if (mediaRecorder.state !== "recording") {
-        mediaRecorder.start()
+
+    if (event.data.silent) {
+      recorder.stop()
+    } else {
+      if (recorder.state !== "recording") {
+        recorder.start()
       }
 
-      const paragraph = document.createElement("p")
-      transcriptionResult.appendChild(paragraph)
-      paragraph.innerText = "👂"
-
-    } else {
-      mediaRecorder.stop()
+      p = document.createElement("p")
+      div.appendChild(p)
+      p.innerText = "👂"
     }
   }
 
-  mediaRecorder.start()
+  recorder.start()
 }
 
 
 document.querySelector("#listenButton").addEventListener("click", listen)
 
-async function transcribe(chunks) {
+async function transcribe(chunks, p, audioContext) {
   const blob = new Blob(chunks, { type: "audio/mp4" })
   const formData = new FormData()
   formData.append("file", blob, "audio.mp4")
   formData.append("model", "whisper-1")
 
-  const paragraph = transcriptionResult.lastChild
-  paragraph.innerText = "🤖"
+  const audioElement = document.createElement('audio')
+  audioElement.src = URL.createObjectURL(blob)
+  audioElement.controls = true
 
   try {
     console.log("transcribing")
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: formData,
     })
 
     const result = await response.json()
-    paragraph.innerText = result.text
+    p.innerText = result.text
+    p.appendChild(audioElement)
+
   } catch (error) {
     console.error(error)
   }
