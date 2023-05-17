@@ -87,20 +87,20 @@ class SwashDictaphone extends BaseComponent {
   }
 
   loadAndHandleEvents() {
-    const db = 'swashDictaphoneEvents.3';
+    const db = 'swashDictaphoneEvents.4';
     const events = JSON.parse(localStorage.getItem(db) || '[]');
     events.forEach(event => this.handleEvent(event, false));
   }
 
   saveEvent(event) {
-    const db = 'swashDictaphoneEvents.3';
+    const db = 'swashDictaphoneEvents.4';
     let events = JSON.parse(localStorage.getItem(db) || '[]');
     events = [...events, event];
     localStorage.setItem(db, JSON.stringify(events));
   }
 
   reset() {
-    localStorage.removeItem('dictaphoneEvents');
+    localStorage.removeItem('swashDictaphoneEvents.4');
     this.$('.final').innerHTML = '';
     this.$('.interim').textContent = '';
   }
@@ -142,7 +142,7 @@ class SwashDictaphone extends BaseComponent {
     const eventTypeHandlers = {
       FinalTranscript: (event) => {
         const commandFunc = {
-          'hard reset please': this.reset
+          'hard reset please': this.reset.bind(this),
         }[event.transcript.trim().toLowerCase()];
 
         if (commandFunc) {
