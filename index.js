@@ -1,75 +1,125 @@
-let apiKey
-
-const div = document.getElementById("transcriptionResult")
-
-async function listen() {
-  apiKey = localStorage.getItem("OPENAI_API_KEY") || prompt("OpenAI API key:")
-  localStorage.setItem("OPENAI_API_KEY", apiKey)
-
-  let audioContext = new AudioContext()
-  await audioContext.audioWorklet.addModule("rms.js")
-
-  let stream =
-    await navigator.mediaDevices.getUserMedia({ audio: true })
-  let source =
-    audioContext.createMediaStreamSource(stream)
-  let rms =
-    new AudioWorkletNode(audioContext, "rms")
-
-  source.connect(rms)
-
-  let recorder = new MediaRecorder(stream)
-  let p
-
-  recorder.ondataavailable = event => transcribe([event.data], p, audioContext)
-
-  rms.port.onmessage = event => {
-    console.log(event.data)
-
-    if (event.data.silent) {
-      recorder.stop()
-    } else {
-      if (recorder.state !== "recording") {
-        recorder.start()
-      }
-
-      p = document.createElement("p")
-      div.appendChild(p)
-      p.innerText = "👂"
-    }
-  }
-
-  recorder.start()
+function setupSpeechRecognition({ lang }) {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.interimResults = true;
+  recognition.continuous = true;
+  recognition.lang = lang;
+  return recognition;
 }
 
+function tag(tagName, attributes = {}, children = []) {
+  const element = document.createElement(tagName);
+  Object.keys(attributes).forEach(key => {
+    element.setAttribute(key, attributes[key]);
+  });
+  children.forEach(child => {
+    if (typeof child === 'string') {
+      child = document.createTextNode(child);
+    } else if (child instanceof HTMLElement) {
+      // do nothing
+    } else {
+      throw new Error('Invalid child type');
+    }
+    element.appendChild(child);
+  });
+  return element;
+}
 
-document.querySelector("#listenButton").addEventListener("click", listen)
+function handleResult(result) {
+  return {
+    transcript: result[0].transcript,
+    isFinal: result.isFinal
+  };
+}
 
-async function transcribe(chunks, p, audioContext) {
-  const blob = new Blob(chunks, { type: "audio/mp4" })
-  const formData = new FormData()
-  formData.append("file", blob, "audio.mp4")
-  formData.append("model", "whisper-1")
+function accumulateTranscripts(results, startingTranscript = '') {
+  return results.reduce((acc, result) => {
+    const cur = handleResult(result);
+    if (cur.isFinal) {
+      return {
+        final: acc.final + cur.transcript,
+        interim: acc.interim
+      };
+    } else {
+      return {
+        final: acc.final,
+        interim: acc.interim + cur.transcript
+      };
+    }
+  }, { final: startingTranscript, interim: '' });
+}
 
-  const audioElement = document.createElement('audio')
-  audioElement.src = URL.createObjectURL(blob)
-  audioElement.controls = true
+function handleResultEvent(event, transcript) {
+  const newResults = Array.from(event.results).slice(event.resultIndex);
+  return accumulateTranscripts(newResults, transcript);
+}
 
-  try {
-    console.log("transcribing")
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: formData,
+class SwashDictaphone extends HTMLElement {
+  constructor() {
+    super();
+
+    this.attachShadow({ mode: 'open' });
+
+    this.shadowRoot.appendChild(
+      tag('link', { rel: 'stylesheet', href: 'index.css' })
+    );
+
+    this.finalSpans = tag('span', { class: 'final' }, [
+      this.finalSpan = tag('span', {}),
+    ]);
+
+    this.shadowRoot.appendChild(
+      tag('span', {}, [
+        this.finalSpans,
+        this.interimSpan = tag('span', { class: 'interim' }),
+      ]));
+
+    this.recognition = setupSpeechRecognition({
+      lang: this.getAttribute('lang') || 'en-US',
     })
 
-    const result = await response.json()
-    p.innerText = result.text
-    p.appendChild(audioElement)
+    this.recognition.start();
 
-  } catch (error) {
-    console.error(error)
+    this.recognition.onresult = event => {
+      console.log(event);
+
+      const { final, interim } =
+        handleResultEvent(event, this.finalSpan.innerText);
+
+      this.interimSpan.textContent = interim;
+      this.finalSpan.textContent = final;
+
+      if (final) {
+        const confidence = event.results[event.results.length - 1][0].confidence
+        let grade;
+        if (confidence > 0.95) {
+          grade = 'A+';
+        } else if (confidence > 0.9) {
+          grade = 'A';
+        } else if (confidence > 0.8) {
+          grade = 'B';
+        } else if (confidence > 0.7) {
+          grade = 'C';
+        } else if (confidence > 0.6) {
+          grade = 'D';
+        } else {
+          grade = 'F';
+        }
+
+        this.finalSpan.setAttribute("data-grade", grade);
+
+        this.dispatchEvent(
+          new CustomEvent('onfinalspeech', { detail: final }));
+
+        this.finalSpan = tag('span', {});
+        this.finalSpans.appendChild(this.finalSpan);
+      }
+    };
+
+    this.recognition.onend = () => {
+      this.recognition.start();
+    };
   }
 }
+
+// Define the new element
+customElements.define('swash-dictaphone', SwashDictaphone);

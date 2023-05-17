@@ -1,8 +1,27 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>swa.sh</title>
-<link rel="stylesheet" href="index.css">
-<script type="module" src="index.js"></script>
-<button id="listenButton">🎙️</button>
-<p id="transcriptionResult"></p>
+<title>💭 swa.sh</title>
+<style>
+  html {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: black;
+    color: ivory;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 1.5rem;
+    line-height: 1.5;
+    padding: 1.5rem;
+  }
+</style>
+<script type=module src=index.js></script>
+<swash-dictaphone />
