@@ -1,3 +1,16 @@
+/*
+ * Vertical rhythm provides a consistent vertical flow of text and elements,
+ * achieved using a baseline grid based on line height.
+ *
+ * Assume line height is 1.5 and base font size is 16px. The computed line
+ * height becomes 24px or 1.5rem, serving as the baseline grid unit.
+ *
+ * Vertical spaces (margins, paddings, etc.) should be multiples of this unit.
+ * For more flexibility, the unit can be further divided into smaller
+ * chunks of 0.25rem. Hence, our 24px line height becomes 6 of these smaller
+ * units, enabling fine control while maintaining vertical rhythm.
+ */
+
 * { box-sizing: border-box; margin: 0; border: 0; }
 
 .final > span:not(:empty) { font-weight: 300; }
@@ -5,6 +18,14 @@
 .interim { opacity: 0.7; }
 
 * { letter-spacing: -0.02em; }
+
+date { font-size: 0.8em; opacity: 0.5; }
+time { font-size: 0.8em; opacity: 0.6; }
+
+.dots { opacity: 0.6; letter-spacing: -0.1em; }
+
+.flex { display: flex; }
+.gap { gap: .5rem; }
 
 article {
   padding-bottom: 100vh;
@@ -29,8 +50,6 @@ article {
   50% { transform: rotate(360deg) scale(0.8); }
   100% { transform: rotate(720deg) scale(1); }
 }
-
-hr { margin-top: 0.5rem; }
 
 [data-grade="A+"] { opacity: 1.0; text-decoration: none; filter: none; }
 [data-grade="A"]  { opacity: 0.9; text-decoration: none; filter: none; }

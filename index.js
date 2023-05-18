@@ -1,135 +1,117 @@
-const Stream = {};
+// swa.sh - a tool, for naught
+// Copyright (C) 2023  Mikael Brockman
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Creates an asynchronous iterator with an unbounded buffer.
- *
- * This function takes a setup function that is used to control
- * the flow of values through the iterator. The setup function
- * receives an object with three methods: `next`, `stop`, and `fail`.
- *
- * The `next` method is used to push new values into the iterator.
- * The `stop` method is used to mark the iterator as done.
- * The `fail` method is used to stop the iterator with an error.
- *
- * @example
- * const iterator = Stream.create(({ next }) => {
- *   let i = 0;
- *   setInterval(() => {
- *     next(i++);
- *   }, 1000);
- * });
- *
- * @param {Function} setup - The setup function.
- * @returns {AsyncIterator} - An asynchronous iterator.
- */
-Stream.create = function(setup) {
-  let resolve, reject;
-  let promise = new Promise((r, e) => { resolve = r; reject = e; });
+function zb32word() {
+  const base = "ybndrfg8ejkmcpqxot1uwisza345h769";
+  const array = new Int32Array(1);
+  window.crypto.getRandomValues(array);
+  const i = array[0];
 
-  // Initialize an array to hold the buffered data.
-  const buffer = [];
+  return (
+    base[i >>> 27 & 0x1f] +
+    base[i >>> 22 & 0x1f] +
+    base[i >>> 17 & 0x1f] +
+    base[i >>> 12 & 0x1f] +
+    base[i >>> 7 & 0x1f] +
+    base[i >>> 2 & 0x1f]
+  )
+}
 
-  const next = value => {
-    // If there is a pending promise, resolve it with the next value.
-    // Otherwise, add the value to the buffer.
-    if (promise) {
-      resolve({ value, done: false });
-      promise = null;
-    } else {
-      buffer.push(value);
-    }
-  };
+function gensym() {
+  return `${zb32word()}${zb32word()}`
+}
 
-  const stop = () => {
-    resolve({ done: true });
-  };
 
-  const fail = error => {
-    reject(error);
-  };
+class Stream {
+  constructor(setup) {
+    this.buffer = [];
 
-  setup({ next, stop, fail });
-
-  return {
-    next() {
-      if (buffer.length > 0) {
-        // If the buffer is not empty, return the next value from the buffer.
-        return Promise.resolve({ value: buffer.shift(), done: false });
-      } else if (promise === null) {
-        // If the buffer is empty and there is no pending promise,
-        // create a new promise.
-        promise = new Promise((r, e) => { resolve = r; reject = e; });
+    const next = value => {
+      if (this.promise) {
+        this.resolve({ value, done: false });
+        this.promise = null;
+      } else {
+        this.buffer.push(value);
       }
+    };
 
-      // Return the pending promise.
-      return promise;
-    },
-    return() {
-      stop();
-      return { done: true };
-    },
-    throw(error) {
-      fail(error);
-    },
-    [Symbol.asyncIterator]() {
-      return this;
+    const stop = () => {
+      this.resolve({ done: true });
+    };
+
+    const fail = error => {
+      this.reject(error);
+    };
+
+    setup({ next, stop, fail });
+  }
+
+  async next() {
+    if (this.buffer.length > 0) {
+      return Promise.resolve({
+        value: this.buffer.shift(),
+        done: false
+      });
     }
-  };
-};
 
-/**
- * Merges multiple asynchronous iterators into a single iterator.
- *
- * This function takes an array of asynchronous iterators and returns
- * a new iterator that yields values from all input iterators as they
- * become available. The order of values in the output iterator is
- * determined by the order in which the input iterators produce them.
- *
- * If one iterator produces values faster than the others, its values
- * will be more frequent in the output. If an input iterator stops,
- * it is removed from the input set, and the merge continues with the
- * remaining iterators.
- *
- * If an input iterator throws an error, the merge stops and the error
- * is thrown from the output iterator.
- *
- * @example
- * const iterator1 = Stream.create(({ next }) => { ... });
- * const iterator2 = Stream.create(({ next }) => { ... });
- * const mergedIterator = Stream.merge([iterator1, iterator2]);
- *
- * @param {Array<AsyncIterator>} iterators - The input iterators.
- * @returns {AsyncGenerator} - The merged iterator.
- */
-Stream.merge = async function* merge(iterators) {
-  // Map each iterator to a promise that resolves with its next value.
-  // Each resolved value is an object containing the value, the done status,
-  // and the index of the source iterator.
-  const promises = iterators.map((iterator, index) =>
-    iterator.next().then(result => ({ ...result, source: index }))
-  );
+    if (!this.promise) {
+      this.promise = new Promise((r, e) => {
+        this.resolve = r;
+        this.reject = e;
+      });
+    }
 
-  // Continue until all promises (iterators) are done.
-  while (promises.length > 0) {
-    // Wait for the fastest promise to resolve.
-    const nextPromise = Promise.race(promises);
-    const { value, done, source } = await nextPromise;
+    return this.promise;
+  }
 
-    if (done) {
-      // If the iterator is done, remove its promise from the array.
-      const index = promises.findIndex((_, i) => i === source);
-      if (index !== -1) {
-        promises.splice(index, 1);
+  return() {
+    this.resolve({ done: true });
+    return Promise.resolve({ done: true });
+  }
+
+  throw(error) {
+    this.reject(error);
+  }
+
+  [Symbol.asyncIterator]() {
+    return this;
+  }
+
+  static async *merge(iterators) {
+    const promises = iterators.map((iterator, index) =>
+      iterator.next().then(result => ({ ...result, source: index }))
+    );
+
+    while (promises.length > 0) {
+      const nextPromise = Promise.race(promises);
+      const { value, done, source } = await nextPromise;
+
+      if (done) {
+        const index = promises.findIndex((_, i) => i === source);
+        if (index !== -1) {
+          promises.splice(index, 1);
+        }
+      } else {
+        yield value;
+        promises[source] = iterators[source].next().then(
+          result => ({ ...result, source }));
       }
-    } else {
-      // If the iterator is not done, yield its value and replace its promise
-      // in the array with a new promise for its next value.
-      yield value;
-      promises[source] = iterators[source].next().then(
-        result => ({ ...result, source }));
     }
   }
-};
+}
 
 class BaseComponent extends HTMLElement {
   constructor(templateContent) {
@@ -168,7 +150,7 @@ class BaseComponent extends HTMLElement {
 }
 
 function speechRecognitionEventStream({ language = 'en-US' }) {
-  return Stream.create(({ next, fail }) => {
+  return new Stream(({ next, fail }) => {
     const recognition =
       new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     recognition.interimResults = true;
@@ -188,6 +170,7 @@ function speechRecognitionEventStream({ language = 'en-US' }) {
               ? confidenceGrade(result[0].confidence)
               : undefined,
             timestamp,
+            id: gensym(),
           });
         });
     };
@@ -229,7 +212,7 @@ class SwashDictaphone extends BaseComponent {
     });
 
     for await (const event of this.recognitionEventStream) {
-      console.log(event);
+      console.log("ok", event);
       this.handleEvent(event, true);
     }
   }
@@ -253,23 +236,48 @@ class SwashDictaphone extends BaseComponent {
 
   insertDelay(timestamp) {
     const t = new Date(this.$('aside').textContent);
+    const t1 = new Date(timestamp);
     if (t) {
-      const delay = (new Date(timestamp) - t) / 1000;
+      const delay = (t1 - t) / 1000;
 
       if (delay < 3) {
         return;
       }
 
+      const delayMargin = `${Math.log(delay + 1)}ex`;
+
       if (this.$('.final > :not(.delay):last-child')) {
-        this.$('.final').appendChild(
-          delay > 6
-            ? this.tag('hr', { class: 'delay', style: `margin-top: ${delay}px` })
-            : this.tag('span', { class: 'delay dots' }, [
+        if (delay > 20) {
+          let formattedDate = t1.toLocaleString('sv-SE', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          });
+
+          let formattedTime = t1.toLocaleString('sv-SE', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+
+          this.$('.final').appendChild(
+            this.tag('div', {
+              class: 'delay flex gap',
+              style: `margin-top: ${delayMargin}`
+            }, delay > 60 ? [
+              this.tag('date', {}, [formattedDate]),
+              this.tag('time', {}, [formattedTime])
+            ] : [])
+          )
+        } else {
+          this.$('.final').appendChild(
+            this.tag('span', { class: 'delay dots' }, [
               ' ',
               '.'.repeat(Math.floor(delay)),
               ' ',
             ])
-        );
+          );
+        }
       }
     }
 
@@ -302,6 +310,7 @@ class SwashDictaphone extends BaseComponent {
 
           this.$('.final').appendChild(this.tag('span', {
             'data-grade': event.grade,
+            'data-id': event.id,
           }, [event.transcript]));
           this.$('.interim').textContent = '';
         }
